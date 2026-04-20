@@ -1,0 +1,19 @@
+.container {
+  padding: 20px;
+}
+
+.input-section {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.priority {
+  margin-left: 10px;
+  font-size: 12px;
+}
+
+.completed {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
