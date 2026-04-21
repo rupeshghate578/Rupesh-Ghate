@@ -1,81 +1,204 @@
-import { LightningElement ,track } from 'lwc';
-export default class TodoApp extends LightningElement {
-   @track tasks = [];
-  @track filteredTasks = [];
-  taskInput = '';
-  priority = 'Low';
-  filter = 'all';
+// DOM Elements
+const taskInput = document.getElementById('task-input');
+const prioritySelect = document.getElementById('priority-select');
+const addBtn = document.getElementById('add-btn');
+const taskList = document.getElementById('task-list');
+const filterBtns = document.querySelectorAll('.filter-btn');
+const emptyState = document.getElementById('empty-state');
+const pendingCount = document.getElementById('pending-count');
+const completedCount = document.getElementById('completed-count');
 
-  handleInput(event) {
-    this.taskInput = event.target.value;
-  }
+// State
+let tasks = [];
+let currentFilter = 'all';
 
-  handlePriorityChange(event) {
-    this.priority = event.target.value;
-  }
+// Initialize app
+function init() {
+    loadTasks();
+    renderTasks();
+    setupEventListeners();
+}
 
-  handleKeyDown(event) {
-    if (event.key === 'Enter') {
-      this.addTask();
+// Setup Event Listeners
+function setupEventListeners() {
+    addBtn.addEventListener('click', addTask);
+    taskInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addTask();
+        }
+    });
+
+    filterBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            filterBtns.forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.dataset.filter;
+            renderTasks();
+        });
+    });
+}
+
+// Add Task
+function addTask() {
+    const taskText = taskInput.value.trim();
+    const priority = prioritySelect.value;
+
+    if (taskText === '') {
+        alert('Please enter a task!');
+        return;
     }
-  }
-
-  addTask() {
-    if (!this.taskInput) return;
 
     const newTask = {
-      id: Date.now(),
-      text: this.taskInput,
-      priority: this.priority,
-      completed: false
+        id: Date.now(),
+        text: taskText,
+        priority: priority,
+        completed: false,
     };
 
-    this.tasks = [...this.tasks, newTask];
-    this.taskInput = '';
-    this.applyFilter();
-  }
+    tasks.push(newTask);
+    taskInput.value = '';
+    prioritySelect.value = 'medium';
 
-  toggleTask(event) {
-    const id = Number(event.target.dataset.id);
-    this.tasks = this.tasks.map(task =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    );
-    this.applyFilter();
-  }
+    saveTasks();
+    renderTasks();
+    updateStats();
+}
 
-  deleteTask(event) {
-    const id = Number(event.target.dataset.id);
-    this.tasks = this.tasks.filter(task => task.id !== id);
-    this.applyFilter();
-  }
+// Delete Task
+function deleteTask(id) {
+    tasks = tasks.filter((task) => task.id !== id);
+    saveTasks();
+    renderTasks();
+    updateStats();
+}
 
-  showAll() {
-    this.filter = 'all';
-    this.applyFilter();
-  }
+// Toggle Task Completion
+function toggleComplete(id) {
+    const task = tasks.find((t) => t.id === id);
+    if (task) {
+        task.completed = !task.completed;
+        saveTasks();
+        renderTasks();
+        updateStats();
+    }
+}
 
-  showPending() {
-    this.filter = 'pending';
-    this.applyFilter();
-  }
+// Edit Task
+function editTask(id) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
 
-  showCompleted() {
-    this.filter = 'completed';
-    this.applyFilter();
-  }
+    const taskElement = document.querySelector(`[data-id="${id}"]`);
+    const taskContent = taskElement.querySelector('.task-content');
 
-  applyFilter() {
-    let temp = [...this.tasks];
+    const editHTML = `
+        <input type="text" class="edit-input" value="${task.text}">
+        <button class="save-btn">Save</button>
+        <button class="cancel-btn">Cancel</button>
+    `;
 
-    if (this.filter === 'completed') {
-      temp = temp.filter(t => t.completed);
-    } else if (this.filter === 'pending') {
-      temp = temp.filter(t => !t.completed);
+    taskContent.innerHTML = editHTML;
+
+    const saveBtn = taskContent.querySelector('.save-btn');
+    const cancelBtn = taskContent.querySelector('.cancel-btn');
+    const editInput = taskContent.querySelector('.edit-input');
+
+    saveBtn.addEventListener('click', () => {
+        const newText = editInput.value.trim();
+        if (newText !== '') {
+            task.text = newText;
+            saveTasks();
+            renderTasks();
+        }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+        renderTasks();
+    });
+
+    editInput.focus();
+}
+
+// Render Tasks
+function renderTasks() {
+    taskList.innerHTML = '';
+
+    let filteredTasks = tasks;
+
+    if (currentFilter === 'pending') {
+        filteredTasks = tasks.filter((t) => !t.completed);
+    } else if (currentFilter === 'completed') {
+        filteredTasks = tasks.filter((t) => t.completed);
     }
 
-    // Move completed to bottom
-    temp.sort((a, b) => a.completed - b.completed);
+    // Sort: pending first, then completed
+    filteredTasks.sort((a, b) => a.completed - b.completed);
 
-    this.filteredTasks = temp;
-  }
+    if (filteredTasks.length === 0) {
+        emptyState.classList.add('show');
+        return;
+    }
+
+    emptyState.classList.remove('show');
+
+    filteredTasks.forEach((task) => {
+        const taskElement = createTaskElement(task);
+        taskList.appendChild(taskElement);
+    });
 }
+
+// Create Task Element
+function createTaskElement(task) {
+    const li = document.createElement('li');
+    li.className = `task-item ${task.completed ? 'completed' : 'pending'}`;
+    li.dataset.id = task.id;
+
+    li.innerHTML = `
+        <input 
+            type="checkbox" 
+            class="checkbox" 
+            ${task.completed ? 'checked' : ''} 
+            onchange="toggleComplete(${task.id})"
+        >
+        <div class="task-content">
+            <span class="task-text">${escapeHtml(task.text)}</span>
+            <span class="priority-badge ${task.priority}">${task.priority}</span>
+        </div>
+        <div class="task-actions">
+            <button class="edit-btn" onclick="editTask(${task.id})">Edit</button>
+            <button class="delete-btn" onclick="deleteTask(${task.id})">Delete</button>
+        </div>
+    `;
+
+    return li;
+}
+
+// Update Statistics
+function updateStats() {
+    const pending = tasks.filter((t) => !t.completed).length;
+    const completed = tasks.filter((t) => t.completed).length;
+
+    pendingCount.textContent = pending;
+    completedCount.textContent = completed;
+}
+
+// Save Tasks to LocalStorage
+function saveTasks() {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+}
+
+// Load Tasks from LocalStorage
+function loadTasks() {
+    const stored = localStorage.getItem('tasks');
+    tasks = stored ? JSON.parse(stored) : [];
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Start the app
+init();
